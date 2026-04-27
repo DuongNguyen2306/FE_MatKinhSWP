@@ -12,6 +12,8 @@ import ModelsPage from "@/pages/admin/catalog/ModelsPage";
 import ProductCreatePage from "@/pages/admin/catalog/ProductCreatePage";
 import ProductListPage from "@/pages/admin/catalog/ProductListPage";
 import ProductVariantsPage from "@/pages/admin/catalog/ProductVariantsPage";
+import OpsProductListPage from "@/pages/admin/catalog/ops/OpsProductListPage";
+import OpsProductVariantsPage from "@/pages/admin/catalog/ops/OpsProductVariantsPage";
 import StatisticsDashboardPage from "@/pages/admin/StatisticsDashboardPage";
 import FinanceAnalyticsPage from "@/pages/admin/FinanceAnalyticsPage";
 import InternalOrdersPage from "@/pages/admin/management/InternalOrdersPage";
@@ -120,6 +122,11 @@ export default function App() {
                 <Route path="inventory/receipts" element={<InventoryReceiptsPage />} />
                 <Route path="inventory/receipts/:id" element={<InboundDetailPage />} />
                 <Route path="inventory/ledger" element={<InventoryLedgerPage />} />
+              </Route>
+
+              <Route element={<RequireRole allowedRoles={["operations"]} message="Chỉ operations được truy cập." />}>
+                <Route path="ops/catalog/products" element={<OpsProductListPage />} />
+                <Route path="ops/catalog/products/:productId/variants" element={<OpsProductVariantsPage />} />
               </Route>
 
               <Route element={<RequireRole allowedRoles={["manager", "admin"]} message="Chỉ manager/admin được truy cập." />}>

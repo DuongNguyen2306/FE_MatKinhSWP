@@ -48,6 +48,13 @@ function sectionLinks(role: string | undefined): { title: string; links: LinkIte
     });
   }
 
+  if (r === "operations") {
+    sections.push({
+      title: "Catalog",
+      links: [{ to: "/admin/ops/catalog/products", label: "Sản phẩm & biến thể" }],
+    });
+  }
+
   if (r === "manager" || r === "admin") {
     sections.push({
       title: "Thống kê",

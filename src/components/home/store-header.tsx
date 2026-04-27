@@ -7,7 +7,24 @@ import { cartItemCountFromResponse } from "@/lib/cart-utils";
 import { canManageCatalog } from "@/lib/catalog-roles";
 import { canAccessInternalOrders, canAccessStaffManagement } from "@/lib/management-roles";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import type { User } from "@/store/slices/authSlice";
 import { logout } from "@/store/slices/authSlice";
+
+function userDisplayName(u: User | null | undefined): string {
+  if (!u) return "";
+  if (typeof u.full_name === "string" && u.full_name.trim()) return u.full_name.trim();
+  const first = typeof u.first_name === "string" ? u.first_name.trim() : "";
+  const last = typeof u.last_name === "string" ? u.last_name.trim() : "";
+  if (first || last) return [first, last].filter(Boolean).join(" ");
+  const p = u.profile && typeof u.profile === "object" ? (u.profile as Record<string, unknown>) : null;
+  if (p) {
+    const fn = p.full_name;
+    if (typeof fn === "string" && fn.trim()) return fn.trim();
+    const nm = p.name;
+    if (typeof nm === "string" && nm.trim()) return nm.trim();
+  }
+  return "";
+}
 
 function IconUser({ className }: { className?: string }) {
   return (
@@ -28,7 +45,8 @@ function IconBag({ className }: { className?: string }) {
 export default function StoreHeader() {
   const dispatch = useAppDispatch();
   const { isAuthenticated, user, token } = useAppSelector((state) => state.auth);
-  const initial = (user?.email ?? user?.name ?? "U").charAt(0).toUpperCase();
+  const displayName = userDisplayName(user);
+  const initial = (displayName || user?.email || "U").charAt(0).toUpperCase();
 
   const cartQuery = useQuery({
     queryKey: ["cart"],
@@ -80,7 +98,7 @@ export default function StoreHeader() {
               </Link>
               <div className="invisible absolute right-0 top-[calc(100%+8px)] z-50 w-56 rounded-xl border border-stone-200 bg-white p-2 opacity-0 shadow-lg transition-all duration-150 group-hover:visible group-hover:opacity-100">
                 <div className="mb-1 rounded-lg bg-stone-50 px-3 py-2">
-                  <p className="text-xs font-semibold text-slate-800">{user?.name || user?.email || "Tài khoản"}</p>
+                  <p className="text-xs font-semibold text-slate-800">{displayName || user?.email || "Tài khoản"}</p>
                   <p className="truncate text-[11px] text-slate-500">{user?.email || "—"}</p>
                 </div>
                 <Link

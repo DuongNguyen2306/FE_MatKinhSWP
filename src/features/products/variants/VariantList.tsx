@@ -13,6 +13,8 @@ function availabilityBadge(available: number | undefined): { text: string; cls: 
   return { text: "Còn hàng", cls: "bg-emerald-100 text-emerald-700" };
 }
 
+export type VariantListActionsMode = "full" | "inbound_only";
+
 interface VariantListProps {
   items: ProductVariant[];
   loading?: boolean;
@@ -22,9 +24,22 @@ interface VariantListProps {
   onEdit: (variant: ProductVariant) => void;
   onDelete: (variant: ProductVariant) => void;
   onInbound: (variant: ProductVariant) => void;
+  /** `inbound_only`: chỉ Nhập hàng (dành cho role vận hành, không sửa/xóa biến thể). */
+  actionsMode?: VariantListActionsMode;
 }
 
-export default function VariantList({ items, loading, error, onRetry, onCreate, onEdit, onDelete, onInbound }: VariantListProps) {
+export default function VariantList({
+  items,
+  loading,
+  error,
+  onRetry,
+  onCreate,
+  onEdit,
+  onDelete,
+  onInbound,
+  actionsMode = "full",
+}: VariantListProps) {
+  const inboundOnly = actionsMode === "inbound_only";
   if (loading) {
     return <p className="mt-4 text-sm text-slate-500">Đang tải biến thể...</p>;
   }
@@ -42,9 +57,11 @@ export default function VariantList({ items, loading, error, onRetry, onCreate, 
     return (
       <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center">
         <p className="text-sm text-slate-600">Chưa có biến thể nào.</p>
-        <Button type="button" className="mt-3 bg-[#2bb6a3]" onClick={onCreate}>
-          Thêm biến thể
-        </Button>
+        {!inboundOnly ? (
+          <Button type="button" className="mt-3 bg-[#2bb6a3]" onClick={onCreate}>
+            Thêm biến thể
+          </Button>
+        ) : null}
       </div>
     );
   }
@@ -94,12 +111,16 @@ export default function VariantList({ items, loading, error, onRetry, onCreate, 
                     <Button type="button" variant="ghost" className="text-indigo-600" onClick={() => onInbound(v)}>
                       Nhập hàng
                     </Button>
-                    <Button type="button" variant="ghost" className="text-[#2bb6a3]" onClick={() => onEdit(v)}>
-                      Sửa
-                    </Button>
-                    <Button type="button" variant="ghost" className="text-red-600" onClick={() => onDelete(v)}>
-                      Xóa
-                    </Button>
+                    {!inboundOnly ? (
+                      <>
+                        <Button type="button" variant="ghost" className="text-[#2bb6a3]" onClick={() => onEdit(v)}>
+                          Sửa
+                        </Button>
+                        <Button type="button" variant="ghost" className="text-red-600" onClick={() => onDelete(v)}>
+                          Xóa
+                        </Button>
+                      </>
+                    ) : null}
                   </div>
                 </td>
               </tr>
