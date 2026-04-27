@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Save, Truck } from "lucide-react";
@@ -70,6 +70,83 @@ function readStr(order: CustomerOrderListItem | null, key: string): string {
   if (!order) return "";
   const v = (order as Record<string, unknown>)[key];
   return typeof v === "string" ? v.trim() : "";
+}
+
+function readCustomerName(order: CustomerOrderListItem | null): string {
+  if (!order) return "";
+  const directKeys = ["name", "receiver_name", "recipient_name", "full_name", "customer_name"];
+  for (const key of directKeys) {
+    const value = readStr(order, key);
+    if (value) {
+      return value;
+    }
+  }
+  const userRaw = order.user;
+  if (userRaw && typeof userRaw === "object") {
+    const user = userRaw as Record<string, unknown>;
+    const userKeys = ["name", "full_name", "display_name", "username"];
+    for (const key of userKeys) {
+      const value = user[key];
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+    }
+  }
+  return "";
+}
+
+function resolveNameFromObject(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object") return null;
+  const rec = raw as Record<string, unknown>;
+  const profile = rec.profile && typeof rec.profile === "object"
+    ? (rec.profile as Record<string, unknown>)
+    : null;
+  const keys = ["full_name", "name", "display_name", "username"];
+  for (const key of keys) {
+    const direct = rec[key];
+    if (typeof direct === "string" && direct.trim()) {
+      return direct.trim();
+    }
+    const nested = profile?.[key];
+    if (typeof nested === "string" && nested.trim()) {
+      return nested.trim();
+    }
+  }
+  if (typeof rec.email === "string" && rec.email.trim()) {
+    return rec.email.trim();
+  }
+  return null;
+}
+
+function resolveStatusActorName(order: CustomerOrderListItem | null, actorRaw: unknown): string {
+  if (actorRaw && typeof actorRaw === "object") {
+    const fromObject = resolveNameFromObject(actorRaw);
+    if (fromObject) return fromObject;
+  }
+  const actorId = typeof actorRaw === "string" ? actorRaw.trim() : "";
+  if (!actorId) return "Hệ thống";
+  if (!order) return "Nhân viên hệ thống";
+  // Nếu actor đã là tên/email thì hiển thị trực tiếp.
+  const seemsObjectId = /^[a-f0-9]{24}$/i.test(actorId);
+  if (!seemsObjectId) return actorId;
+
+  const orderRec = order as Record<string, unknown>;
+  const pools: unknown[] = [
+    orderRec.user_id,
+    order.user,
+    orderRec.handled_by,
+    orderRec.updated_by,
+    orderRec.created_by,
+  ];
+  for (const candidate of pools) {
+    if (!candidate || typeof candidate !== "object") continue;
+    const rec = candidate as Record<string, unknown>;
+    const cid = typeof rec._id === "string" ? rec._id.trim() : "";
+    if (cid && cid === actorId) {
+      return resolveNameFromObject(rec) ?? actorId;
+    }
+  }
+  return "Nhân viên hệ thống";
 }
 function readNum(order: CustomerOrderListItem | null, key: string): number | null {
   if (!order) return null;
@@ -217,6 +294,7 @@ const INBOUND_STEPS = ["DRAFT", "PENDING_APPROVAL", "APPROVED", "RECEIVED", "COM
 
 export default function AdminOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const role = useAppSelector((s) => normalizeRole(s.auth.user?.role) ?? "");
 
@@ -249,6 +327,7 @@ export default function AdminOrderDetailPage() {
   const [rejectReason, setRejectReason] = useState("");
   const [carrier, setCarrier] = useState<string | null>(null);
   const [tracking, setTracking] = useState<string | null>(null);
+  const [isShippingEditing, setIsShippingEditing] = useState(true);
   const [inboundSyncRetry, setInboundSyncRetry] = useState(0);
   const canSeeInboundPanel = orderType === "pre_order" && isConfirmedOrLater(currentStatus) && Boolean(oid);
 
@@ -314,10 +393,11 @@ export default function AdminOrderDetailPage() {
         tracking_code: displayTracking,
       }),
     onSuccess: () => {
-      toast.success("Đã lưu thông tin vận chuyển.");
+      toast.success("Đã lưu thông tin vận chuyển.", { duration: 1000 });
       queryClient.invalidateQueries({ queryKey: ["admin", "orders", "detail", id] });
       setCarrier(null);
       setTracking(null);
+      setIsShippingEditing(false);
     },
     onError: (e) => toast.error(getApiErrorMessage(e, "Không thể cập nhật thông tin vận chuyển.")),
   });
@@ -430,6 +510,16 @@ export default function AdminOrderDetailPage() {
               </>
             ) : null}
 
+            {!isSales && currentStatus === "return_requested" && oid ? (
+              <Button
+                type="button"
+                className="h-8 bg-orange-600 px-3 text-xs text-white hover:bg-orange-700"
+                onClick={() => navigate(`/admin/returns?order_id=${encodeURIComponent(oid)}`)}
+              >
+                Xử lý trả hàng
+              </Button>
+            ) : null}
+
             {(!isSales || currentStatus === "return_requested")
               ? nextStatusesVisible.map((nextStatus) => (
                   <Button
@@ -515,6 +605,7 @@ export default function AdminOrderDetailPage() {
               <div className="grid gap-2 text-sm sm:grid-cols-2">
                 <p><span className="text-slate-500">Loại đơn: </span><strong>{String(order.order_type ?? "—")}</strong></p>
                 <p><span className="text-slate-500">Ngày tạo: </span><strong>{fmtDate(order.created_at)}</strong></p>
+                <p><span className="text-slate-500">Khách hàng: </span><strong>{readCustomerName(order) || "—"}</strong></p>
                 <p><span className="text-slate-500">SĐT: </span><strong>{readStr(order, "phone") || "—"}</strong></p>
                 <p><span className="text-slate-500">Địa chỉ: </span><strong>{readStr(order, "shipping_address") || "—"}</strong></p>
                 {readStr(order, "cancel_reason") ? (
@@ -692,7 +783,9 @@ export default function AdminOrderDetailPage() {
                       <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-teal-400" />
                       <div>
                         <p className="font-medium text-slate-800">{h.action ?? "—"}</p>
-                        <p className="text-xs text-slate-500">{fmtDate(h.at)} {h.actor ? `· ${h.actor}` : ""}</p>
+                        <p className="text-xs text-slate-500">
+                          {fmtDate(h.at)} {h.actor ? `· ${resolveStatusActorName(order, h.actor)}` : ""}
+                        </p>
                       </div>
                     </li>
                   ))}
@@ -754,7 +847,7 @@ export default function AdminOrderDetailPage() {
               <p className="mb-3 text-xs text-slate-400">
                 Khách xem ở trang đơn (chỉ đọc). Chỉnh được khi đơn ở trạng thái Đã xác nhận, Đang đóng gói, Đang giao hoặc Hoàn thành.
               </p>
-              <fieldset disabled={!shippingEditable || shippingMutation.isPending} className="space-y-3">
+              <fieldset disabled={!shippingEditable || shippingMutation.isPending || !isShippingEditing} className="space-y-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Đơn vị vận chuyển</Label>
                   <Input
@@ -773,21 +866,34 @@ export default function AdminOrderDetailPage() {
                     className="h-9 font-mono text-sm"
                   />
                 </div>
-                <Button
-                  type="button"
-                  className="w-full bg-red-600 hover:bg-red-700"
-                  disabled={!shippingEditable || shippingMutation.isPending}
-                  onClick={() => shippingMutation.mutate()}
-                >
-                  <Save className="mr-1.5 h-4 w-4" />
-                  {shippingMutation.isPending ? "Đang lưu…" : "Lưu vận chuyển"}
-                </Button>
-                {!shippingEditable ? (
-                  <p className="text-center text-xs text-slate-400">
-                    Trạng thái hiện tại <strong>{orderReadableStatus(order.status)}</strong> không cho phép chỉnh sửa.
-                  </p>
-                ) : null}
               </fieldset>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                  <Button
+                    type="button"
+                    className="h-11 rounded-xl bg-[#2bb6a3] font-semibold text-white shadow-sm hover:brightness-95"
+                    disabled={!shippingEditable || shippingMutation.isPending || !isShippingEditing}
+                    onClick={() => shippingMutation.mutate()}
+                  >
+                    <Save className="mr-1.5 h-4 w-4" />
+                    {shippingMutation.isPending ? "Đang lưu…" : "Lưu vận chuyển"}
+                  </Button>
+                  {shippingEditable ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 rounded-xl border-slate-300 bg-white font-semibold text-slate-700 hover:bg-slate-50"
+                      disabled={shippingMutation.isPending || isShippingEditing}
+                      onClick={() => setIsShippingEditing(true)}
+                    >
+                      Chỉnh sửa
+                    </Button>
+                  ) : null}
+              </div>
+              {!shippingEditable ? (
+                <p className="mt-2 text-center text-xs text-slate-400">
+                  Trạng thái hiện tại <strong>{orderReadableStatus(order.status)}</strong> không cho phép chỉnh sửa.
+                </p>
+              ) : null}
             </section>
           </div>
         </div>

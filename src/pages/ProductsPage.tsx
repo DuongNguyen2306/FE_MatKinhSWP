@@ -43,7 +43,7 @@ function fmtVnd(value: number): string {
 function getListTitle(type: string, search: string): string {
   const s = search.trim().toLowerCase();
   if (s && (s.includes("ram") || s.includes("râm"))) {
-    return "Kính râm";
+    return "Phụ kiện";
   }
   if (type === "frame") {
     return "Gọng kính";
@@ -51,8 +51,11 @@ function getListTitle(type: string, search: string): string {
   if (type === "lens") {
     return "Tròng kính";
   }
+  if (type === "accessory" || type === "accesory") {
+    return "Phụ kiện";
+  }
   if (type === "sunglasses") {
-    return "Kính râm";
+    return "Phụ kiện";
   }
   return "Tất cả sản phẩm";
 }
@@ -93,9 +96,16 @@ export default function ProductsPage() {
   };
 
   const listTitle = getListTitle(type, search);
+  const normalizedSearch = useMemo(() => {
+    const s = search.trim().toLowerCase();
+    if (s && (s.includes("ram") || s.includes("râm"))) {
+      return "phụ kiện";
+    }
+    return search;
+  }, [search]);
   const listDescription =
-    search
-      ? `Kết quả tìm theo: "${search}". Dữ liệu từ API sản phẩm.`
+    normalizedSearch
+      ? `Kết quả tìm theo: "${normalizedSearch}".`
       : "";
 
   return (

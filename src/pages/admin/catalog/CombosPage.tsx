@@ -63,7 +63,7 @@ export default function CombosAdminPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Quản lý Combo</h1>
-          <p className="text-sm text-slate-600">CRUD combos: frame variant + lens variant + giá combo.</p>
+          <p className="text-sm text-slate-600">Combo sản phẩm</p>
         </div>
         <Button type="button" className="bg-[#2bb6a3]" onClick={() => setCreateOpen(true)}>
           + Tạo combo

@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Plus, Warehouse } from "lucide-react";
 import { toast } from "sonner";
 import { createInbound } from "@/api/inboundApi";
-import { INBOUND_STATUS_LABEL, INBOUND_STATUS_OPTIONS, INBOUND_TYPE_LABEL, INBOUND_TYPE_OPTIONS } from "@/constants/inbound";
+import { inboundActionMatrix, INBOUND_STATUS_LABEL, INBOUND_STATUS_OPTIONS, INBOUND_TYPE_LABEL, INBOUND_TYPE_OPTIONS } from "@/constants/inbound";
 import { useInboundsList } from "@/hooks/useInboundsList";
 import { useInboundActions } from "@/hooks/useInboundActions";
 import { normalizeRole } from "@/lib/role-routing";
@@ -89,7 +89,7 @@ export default function InventoryReceiptsPage() {
     supplier_name: supplierName || undefined,
     reference_order_id: referenceOrderId || undefined,
   });
-  const { submitMutation } = useInboundActions();
+  const { submitMutation, approveMutation, rejectMutation, cancelMutation, receiveMutation, completeMutation } = useInboundActions();
 
   const createMutation = useMutation({
     mutationFn: (payload: InboundPayload) => createInbound(payload),
@@ -181,8 +181,8 @@ export default function InventoryReceiptsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Inbound Receipts</h1>
-          <p className="mt-1 text-sm text-slate-600">Workflow: DRAFT → PENDING_APPROVAL → APPROVED → RECEIVED → COMPLETED/CANCELLED.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Biên lai nhập kho</h1>
+          
         </div>
         {canCreate ? (
           <Button type="button" className="bg-[#2bb6a3]" onClick={() => setShowCreateForm((v) => !v)}>
@@ -337,6 +337,7 @@ export default function InventoryReceiptsPage() {
                 {rows.map((r, idx) => {
                   const id = String(r._id ?? r.id ?? idx);
                   const inboundStatus = String(r.status ?? "DRAFT").toUpperCase();
+                  const actions = inboundActionMatrix(inboundStatus, role);
                   const isHighlighted =
                     Boolean(referenceOrderId) &&
                     extractReferenceOrderIds(r as Record<string, unknown>).includes(referenceOrderId);
@@ -373,6 +374,96 @@ export default function InventoryReceiptsPage() {
                               }}
                             >
                               Submit
+                            </Button>
+                          ) : null}
+                          {actions.canApprove ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="bg-emerald-600 text-white hover:bg-emerald-700"
+                              disabled={approveMutation.isPending}
+                              onClick={() => {
+                                approveMutation.mutate(id, {
+                                  onSuccess: () => toast.success("Đã approve phiếu nhập."),
+                                  onError: (e) => toast.error(parseApiError(e, "Không thể approve phiếu nhập.")),
+                                });
+                              }}
+                            >
+                              Approve
+                            </Button>
+                          ) : null}
+                          {actions.canReject ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-red-200 text-red-700"
+                              disabled={rejectMutation.isPending}
+                              onClick={() => {
+                                const note = window.prompt("Nhập lý do reject:", "")?.trim() ?? "";
+                                rejectMutation.mutate(
+                                  { id, note },
+                                  {
+                                    onSuccess: () => toast.success("Đã reject phiếu nhập."),
+                                    onError: (e) => toast.error(parseApiError(e, "Không thể reject phiếu nhập.")),
+                                  }
+                                );
+                              }}
+                            >
+                              Reject
+                            </Button>
+                          ) : null}
+                          {actions.canCancel ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-red-200 text-red-700"
+                              disabled={cancelMutation.isPending}
+                              onClick={() => {
+                                const reason = window.prompt("Nhập lý do cancel:", "")?.trim() ?? "";
+                                cancelMutation.mutate(
+                                  { id, reason },
+                                  {
+                                    onSuccess: () => toast.success("Đã cancel phiếu nhập."),
+                                    onError: (e) => toast.error(parseApiError(e, "Không thể cancel phiếu nhập.")),
+                                  }
+                                );
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          ) : null}
+                          {actions.canReceive ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="bg-indigo-600 text-white hover:bg-indigo-700"
+                              disabled={receiveMutation.isPending}
+                              onClick={() => {
+                                receiveMutation.mutate(id, {
+                                  onSuccess: () => toast.success("Đã receive phiếu nhập."),
+                                  onError: (e) => toast.error(parseApiError(e, "Không thể receive phiếu nhập.")),
+                                });
+                              }}
+                            >
+                              Receive
+                            </Button>
+                          ) : null}
+                          {actions.canComplete ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="bg-violet-600 text-white hover:bg-violet-700"
+                              disabled={completeMutation.isPending}
+                              onClick={() => {
+                                completeMutation.mutate(id, {
+                                  onSuccess: () => toast.success("Đã complete phiếu nhập."),
+                                  onError: (e) => toast.error(parseApiError(e, "Không thể complete phiếu nhập.")),
+                                });
+                              }}
+                            >
+                              Complete
                             </Button>
                           ) : null}
                         </div>

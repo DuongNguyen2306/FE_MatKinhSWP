@@ -130,7 +130,7 @@ export default function RegisterForm() {
       </Button>
 
       <p className="text-center text-sm text-slate-600">
-        Bạn đã có tài khoản MYLENS?{" "}
+        Bạn đã có tài khoản OptiLens?{" "}
         <Link to="/login" className="font-semibold text-[#2bb6a3] hover:underline">
           Đăng nhập ngay
         </Link>

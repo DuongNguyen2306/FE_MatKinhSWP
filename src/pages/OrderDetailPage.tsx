@@ -15,6 +15,7 @@ import { canCustomerCancelOrder, orderReadableStatus } from "@/lib/order-utils";
 import { cancelMyOrder, confirmReceivedOrder, fetchMyOrderDetail } from "@/services/order.service";
 import { createMyAddress } from "@/services/users.service";
 import RequestReturnModal from "@/components/returns/RequestReturnModal";
+import CancelOrderModal from "@/components/orders/CancelOrderModal";
 import type { CustomerOrderListItem, OrderLineItem } from "@/types/order";
 
 /* ─── data helpers ─── */
@@ -262,6 +263,7 @@ export default function OrderDetailPage() {
   const [newAddress, setNewAddress] = useState("");
   const [localShipping, setLocalShipping] = useState("");
   const [showReturnModal, setShowReturnModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   const detailQuery = useQuery({
     queryKey: ["orders", "detail", id],
@@ -270,9 +272,10 @@ export default function OrderDetailPage() {
   });
 
   const cancelMutation = useMutation({
-    mutationFn: (oid: string) => cancelMyOrder(oid),
+    mutationFn: ({ oid, reason }: { oid: string; reason?: string }) => cancelMyOrder(oid, reason),
     onSuccess: () => {
       toast.success("Đã gửi yêu cầu hủy đơn.");
+      setShowCancelModal(false);
       queryClient.invalidateQueries({ queryKey: ["orders", "my"] });
       queryClient.invalidateQueries({ queryKey: ["orders", "detail", id] });
     },
@@ -311,6 +314,12 @@ export default function OrderDetailPage() {
   const rawAddr = readStr(order, "shipping_address") || "—";
   const shippingAddr = localShipping || rawAddr;
   const missingAddr = isPreOrder && rawAddr.toLowerCase() === "khách hàng cập nhật sau";
+  const recipientName =
+    readStr(order, "receiver_name") ||
+    readStr(order, "recipient_name") ||
+    readStr(order, "full_name") ||
+    readStr(order, "customer_name") ||
+    readStr(order, "name");
   const shippingCarrier = readStr(order, "shipping_carrier");
   const trackingCode = readStr(order, "tracking_code");
   const cancelReason = readStr(order, "cancel_reason");
@@ -401,7 +410,7 @@ export default function OrderDetailPage() {
           <div className="flex flex-wrap gap-2">
             {canCancel && oid ? (
               <Button type="button" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50"
-                disabled={cancelMutation.isPending} onClick={() => cancelMutation.mutate(oid)}>
+                disabled={cancelMutation.isPending} onClick={() => setShowCancelModal(true)}>
                 {cancelMutation.isPending ? "Đang hủy…" : "Hủy đơn"}
               </Button>
             ) : null}
@@ -541,6 +550,13 @@ export default function OrderDetailPage() {
             <Truck className="h-4 w-4 text-slate-400" /> Vận chuyển & Người nhận
           </h2>
           <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex items-start gap-2.5">
+              <div className="mt-0.5 h-4 w-4 shrink-0 rounded-full border border-slate-300" />
+              <div>
+                <p className="text-xs text-slate-400">Người nhận</p>
+                <p className="text-sm font-medium text-slate-800">{recipientName || "—"}</p>
+              </div>
+            </div>
             <div className="flex items-start gap-2.5">
               <Phone className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
               <div>
@@ -760,6 +776,16 @@ export default function OrderDetailPage() {
           }}
         />
       ) : null}
+
+      <CancelOrderModal
+        open={showCancelModal && Boolean(oid)}
+        loading={cancelMutation.isPending}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={(reason) => {
+          if (!oid) return;
+          cancelMutation.mutate({ oid, reason });
+        }}
+      />
 
       <SiteFooter />
     </div>

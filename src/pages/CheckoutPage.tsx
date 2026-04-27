@@ -6,7 +6,7 @@ import type { Province, District, Ward } from "sub-vn";
 import { getCart } from "@/services/shop.service";
 import { postCheckout } from "@/services/order.service";
 import { createMomoPayment, createVnpayPayment } from "@/services/payment.service";
-import { getMyAddresses } from "@/services/users.service";
+import { getMyAddresses, getMyProfile } from "@/services/users.service";
 import { getApiErrorMessage } from "@/lib/api-error";
 import type { PaymentMethod, ShippingMethod } from "@/types/shop";
 import type { UserAddress } from "@/types/user-profile";
@@ -71,10 +71,42 @@ function readProfilePhone(userLike: unknown): string {
   return "";
 }
 
+function readProfileReceiverName(userLike: unknown): string {
+  if (!userLike || typeof userLike !== "object") return "";
+  const u = userLike as Record<string, unknown>;
+  if (typeof u.full_name === "string" && u.full_name.trim()) return u.full_name.trim();
+  const first = typeof u.first_name === "string" ? u.first_name.trim() : "";
+  const last = typeof u.last_name === "string" ? u.last_name.trim() : "";
+  if (first || last) return [first, last].filter(Boolean).join(" ").trim();
+  if (typeof u.name === "string" && u.name.trim()) return u.name.trim();
+  const profile = u.profile;
+  if (profile && typeof profile === "object") {
+    const p = profile as Record<string, unknown>;
+    if (typeof p.full_name === "string" && p.full_name.trim()) return p.full_name.trim();
+    const pFirst = typeof p.first_name === "string" ? p.first_name.trim() : "";
+    const pLast = typeof p.last_name === "string" ? p.last_name.trim() : "";
+    if (pFirst || pLast) return [pFirst, pLast].filter(Boolean).join(" ").trim();
+    if (typeof p.name === "string" && p.name.trim()) return p.name.trim();
+  }
+  return "";
+}
+
+function readAddressReceiverName(addrLike: unknown): string {
+  if (!addrLike || typeof addrLike !== "object") return "";
+  const a = addrLike as Record<string, unknown>;
+  if (typeof a.receiver_name === "string" && a.receiver_name.trim()) return a.receiver_name.trim();
+  if (typeof a.recipient_name === "string" && a.recipient_name.trim()) return a.recipient_name.trim();
+  if (typeof a.name === "string" && a.name.trim()) return a.name.trim();
+  return "";
+}
+
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const linesQueryValue = searchParams.get("lines");
+  const orderConfirmHref = linesQueryValue?.trim()
+    ? `/checkout/confirm?lines=${encodeURIComponent(linesQueryValue.trim())}`
+    : "/checkout/confirm";
   const queryClient = useQueryClient();
   const authUser = useAppSelector((s) => s.auth.user);
   const cartQuery = useQuery({
@@ -84,6 +116,11 @@ export default function CheckoutPage() {
   const addressesQuery = useQuery({
     queryKey: ["users", "my-addresses"],
     queryFn: () => getMyAddresses(),
+  });
+  const profileQuery = useQuery({
+    queryKey: ["users", "my-profile", "checkout"],
+    enabled: Boolean(authUser),
+    queryFn: () => getMyProfile(),
   });
   const rows = cartItemsArrayFromResponse(cartQuery.data);
 
@@ -137,6 +174,20 @@ export default function CheckoutPage() {
   const [shippingMethod, setShippingMethod] = useState<ShippingMethod>("ship");
   const [submitting, setSubmitting] = useState(false);
   const [phone, setPhone] = useState("");
+  const suggestedBuyerName = useMemo(() => {
+    const fromProfileQuery = readProfileReceiverName(profileQuery.data);
+    if (fromProfileQuery) return fromProfileQuery;
+    const fromAuth = readProfileReceiverName(authUser);
+    if (fromAuth) return fromAuth;
+    const addresses = addressesQuery.data ?? [];
+    const preferred = addresses.find((addr) => addr.is_default) ?? addresses[0];
+    return readAddressReceiverName(preferred);
+  }, [profileQuery.data, authUser, addressesQuery.data]);
+  const [buyerName, setBuyerName] = useState("");
+
+  useEffect(() => {
+    setBuyerName((prev) => (prev.trim() ? prev : suggestedBuyerName));
+  }, [suggestedBuyerName]);
 
   // Lazy-load sub-vn chỉ khi trang checkout mount → không ảnh hưởng main bundle
   useEffect(() => {
@@ -245,6 +296,11 @@ export default function CheckoutPage() {
       toast.error("Vui lòng chọn hình thức thanh toán.");
       return;
     }
+    const trimmedBuyerName = buyerName.trim();
+    if (!trimmedBuyerName) {
+      toast.error("Vui lòng nhập họ và tên người mua hàng.");
+      return;
+    }
     if (!/^\d{9,11}$/.test(phone.trim())) {
       toast.error("Vui lòng nhập số điện thoại hợp lệ (9-11 số).");
       return;
@@ -279,6 +335,11 @@ export default function CheckoutPage() {
       }
       const res = await postCheckout({
         shipping_address: fullAddress,
+        receiver_name: trimmedBuyerName,
+        recipient_name: trimmedBuyerName,
+        full_name: trimmedBuyerName,
+        customer_name: trimmedBuyerName,
+        name: trimmedBuyerName,
         phone: phone.trim(),
         payment_method: paymentMethod,
         shipping_method: shippingMethod,
@@ -307,8 +368,8 @@ export default function CheckoutPage() {
         }
         toast.error(
           paymentMethod === "momo"
-            ? "Hiện không mở được trang thanh toán MoMo. Bạn thử lại sau hoặc chọn trả tiền khi nhận hàng. Nếu vẫn lỗi, vui lòng gọi hotline để được hỗ trợ."
-            : "Hiện không mở được trang thanh toán VNPay. Bạn thử lại sau hoặc chọn trả tiền khi nhận hàng. Nếu vẫn lỗi, vui lòng gọi hotline để được hỗ trợ."
+            ? "Hiện không mở được trang thanh toán MoMo. Bạn thử lại sau hoặc chọn VNPay / COD. Nếu vẫn lỗi, vui lòng gọi hotline để được hỗ trợ."
+            : "Hiện không mở được trang thanh toán VNPay. Bạn thử lại sau hoặc chọn MoMo / COD. Nếu vẫn lỗi, vui lòng gọi hotline để được hỗ trợ."
         );
         return;
       }
@@ -333,6 +394,14 @@ export default function CheckoutPage() {
             <section>
               <h1 className="text-4xl font-bold uppercase tracking-wide text-slate-900">Thông tin giao hàng</h1>
               <div className="mt-4 space-y-3">
+                <Label htmlFor="checkout-buyer-name">Họ và tên người mua hàng</Label>
+                <Input
+                  id="checkout-buyer-name"
+                  value={buyerName}
+                  onChange={(e) => setBuyerName(e.target.value)}
+                  placeholder="Nhập họ tên đầy đủ"
+                  autoComplete="name"
+                />
                 <Label htmlFor="checkout-phone">Số điện thoại nhận hàng</Label>
                 <Input
                   id="checkout-phone"
@@ -453,9 +522,13 @@ export default function CheckoutPage() {
                 ))}
               </div>
               {paymentMethod === "momo" || paymentMethod === "vnpay" ? (
-                <p className="mt-3 text-sm text-slate-600">Sau khi xác nhận đơn, hệ thống sẽ chuyển bạn sang cổng thanh toán để hoàn tất giao dịch.</p>
+                <p className="mt-3 text-sm text-slate-600">
+                  Sau khi xác nhận đơn, hệ thống sẽ chuyển bạn sang cổng thanh toán để hoàn tất giao dịch.
+                </p>
               ) : (
-                <p className="mt-3 text-sm text-slate-600">Bạn thanh toán khi nhận hàng (COD), không cần chuyển sang cổng thanh toán.</p>
+                <p className="mt-3 text-sm text-slate-600">
+                  Bạn thanh toán khi nhận hàng (COD), không cần chuyển sang cổng thanh toán.
+                </p>
               )}
             </section>
 
@@ -490,6 +563,12 @@ export default function CheckoutPage() {
                       ? "Thanh toán bằng VNPay"
                       : "Đặt hàng (COD)"}
               </Button>
+              <Link
+                to={orderConfirmHref}
+                className="inline-flex h-11 items-center justify-center rounded-full border border-[#2bb6a3]/40 bg-white px-6 text-sm font-semibold text-[#2bb6a3] transition hover:bg-[#2bb6a3]/5"
+              >
+                Quay lại xác nhận đơn
+              </Link>
               <Link
                 to="/cart"
                 className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"

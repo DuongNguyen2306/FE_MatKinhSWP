@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import SiteHeader from "@/components/layout/site-header";
 import { getCart } from "@/services/shop.service";
 import { cartItemCountFromResponse } from "@/lib/cart-utils";
 import { canManageCatalog } from "@/lib/catalog-roles";
 import { canAccessInternalOrders, canAccessStaffManagement } from "@/lib/management-roles";
-import { useAppSelector } from "@/store/hooks";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { logout } from "@/store/slices/authSlice";
 
 function IconUser({ className }: { className?: string }) {
   return (
@@ -24,8 +26,9 @@ function IconBag({ className }: { className?: string }) {
 }
 
 export default function StoreHeader() {
+  const dispatch = useAppDispatch();
   const { isAuthenticated, user, token } = useAppSelector((state) => state.auth);
-  const initial = (user?.email ?? "U").charAt(0).toUpperCase();
+  const initial = (user?.email ?? user?.name ?? "U").charAt(0).toUpperCase();
 
   const cartQuery = useQuery({
     queryKey: ["cart"],
@@ -66,23 +69,53 @@ export default function StoreHeader() {
               Đơn nội bộ
             </Link>
           ) : null}
-          {isAuthenticated && (user?.role ?? "").toLowerCase() === "customer" ? (
-            <Link
-              to="/orders"
-              className="text-sm font-medium text-stone-600 transition duration-200 hover:text-[#2BBBAD]"
-              title="Đơn hàng của tôi"
-            >
-              Đơn hàng
-            </Link>
-          ) : null}
           {isAuthenticated ? (
-            <Link
-              to="/profile"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-[#2BBBAD]/25 bg-[#2BBBAD]/10 text-sm font-semibold text-[#1a6b63] transition hover:bg-[#2BBBAD]/18"
-              title={user?.email ?? "Hồ sơ"}
-            >
-              {initial}
-            </Link>
+            <div className="group relative">
+              <Link
+                to="/profile"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-[#2BBBAD]/25 bg-[#2BBBAD]/10 text-sm font-semibold text-[#1a6b63] transition hover:bg-[#2BBBAD]/18"
+                title={user?.email ?? "Hồ sơ"}
+              >
+                {initial}
+              </Link>
+              <div className="invisible absolute right-0 top-[calc(100%+8px)] z-50 w-56 rounded-xl border border-stone-200 bg-white p-2 opacity-0 shadow-lg transition-all duration-150 group-hover:visible group-hover:opacity-100">
+                <div className="mb-1 rounded-lg bg-stone-50 px-3 py-2">
+                  <p className="text-xs font-semibold text-slate-800">{user?.name || user?.email || "Tài khoản"}</p>
+                  <p className="truncate text-[11px] text-slate-500">{user?.email || "—"}</p>
+                </div>
+                <Link
+                  to="/profile"
+                  className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-stone-100"
+                >
+                  Thông tin
+                </Link>
+                {(user?.role ?? "").toLowerCase() === "customer" ? (
+                  <Link
+                    to="/orders"
+                    className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-stone-100"
+                  >
+                    Đơn hàng
+                  </Link>
+                ) : null}
+                <Link
+                  to="/cart"
+                  className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-stone-100"
+                >
+                  Giỏ hàng
+                </Link>
+                <button
+                  type="button"
+                  className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-red-600 transition hover:bg-red-50"
+                  onClick={() => {
+                    void dispatch(logout()).then(() => {
+                      toast.success("Đã đăng xuất.");
+                    });
+                  }}
+                >
+                  Đăng xuất
+                </button>
+              </div>
+            </div>
           ) : (
             <Link
               to="/login"

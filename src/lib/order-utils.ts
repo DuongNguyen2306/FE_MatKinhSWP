@@ -46,7 +46,7 @@ export function orderReadableStatus(status: string | undefined): string {
   if (s === "confirmed") return "Đã xác nhận";
   if (s === "processing") return "Đang xử lý";
   if (s === "fulfilled") return "Hoàn tất gia công";
-  if (s === "manufacturing") return "Đang gia công tròng";
+  if (s === "manufacturing") return "Đang gia công";
   if (s === "received") return "Hàng đã về kho";
   if (s === "packed") return "Đã đóng gói";
   if (s === "shipping") return "Đang giao";

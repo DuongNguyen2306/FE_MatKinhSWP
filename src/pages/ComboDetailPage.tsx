@@ -76,6 +76,26 @@ function readProfilePhone(userLike: unknown): string {
   return "";
 }
 
+function readProfileReceiverName(userLike: unknown): string {
+  if (!userLike || typeof userLike !== "object") return "";
+  const u = userLike as Record<string, unknown>;
+  if (typeof u.full_name === "string" && u.full_name.trim()) return u.full_name.trim();
+  const first = typeof u.first_name === "string" ? u.first_name.trim() : "";
+  const last = typeof u.last_name === "string" ? u.last_name.trim() : "";
+  if (first || last) return [first, last].filter(Boolean).join(" ").trim();
+  if (typeof u.name === "string" && u.name.trim()) return u.name.trim();
+  const profile = u.profile;
+  if (profile && typeof profile === "object") {
+    const p = profile as Record<string, unknown>;
+    if (typeof p.full_name === "string" && p.full_name.trim()) return p.full_name.trim();
+    const pFirst = typeof p.first_name === "string" ? p.first_name.trim() : "";
+    const pLast = typeof p.last_name === "string" ? p.last_name.trim() : "";
+    if (pFirst || pLast) return [pFirst, pLast].filter(Boolean).join(" ").trim();
+    if (typeof p.name === "string" && p.name.trim()) return p.name.trim();
+  }
+  return "";
+}
+
 function defaultAddressFromList(addresses: unknown): string {
   if (!Array.isArray(addresses)) return "";
   const list = addresses as Array<Record<string, unknown>>;
@@ -207,6 +227,7 @@ export default function ComboDetailPage() {
   const saving = Math.max(0, totalBefore - comboPrice);
   const savingPct = totalBefore > 0 ? Math.round((saving / totalBefore) * 100) : 0;
   const profilePhone = readProfilePhone(authUser);
+  const profileReceiverName = readProfileReceiverName(authUser);
   const needPreorderPhoneInput = profilePhone.length === 0;
 
   useEffect(() => {
@@ -272,6 +293,8 @@ export default function ComboDetailPage() {
         shipping_address: preorderAddress.trim(),
         payment_method: preorderPaymentMethod,
         shipping_method: preorderShippingMethod,
+        receiver_name: profileReceiverName || undefined,
+        recipient_name: profileReceiverName || undefined,
         phone: phoneForPreorder,
         items: [{ combo_id: cid, quantity: Math.max(1, qty), lens_params: {} }],
       });

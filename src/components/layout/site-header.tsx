@@ -7,18 +7,11 @@ const navItems = [
   { to: "/", label: "Trang chủ" },
   { to: "/products?type=frame", label: "Gọng kính" },
   { to: "/products?type=lens", label: "Tròng kính" },
-  { to: "/products?search=kinh%20ram", label: "Kính râm" },
+  { to: "/products?type=accessory", label: "Phụ kiện" },
   { to: "/combos", label: "Combo" },
+  { to: "/products-intro", label: "Giới thiệu" },
   { to: "/products", label: "Xem thêm" },
 ];
-
-function IconSearch({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-    </svg>
-  );
-}
 
 function IconUser({ className }: { className?: string }) {
   return (
@@ -47,7 +40,7 @@ function LogoMark() {
       >
         <img
           src="/images/logo.png"
-          alt="MYLENS Eyewear Store"
+          alt="OptiLens Eyewear Store"
           width={220}
           height={64}
           className="block h-9 w-auto max-w-[min(200px,46vw)] object-contain object-center sm:h-10 sm:max-w-[220px] md:h-11 md:max-w-[240px]"
@@ -57,7 +50,7 @@ function LogoMark() {
         />
       </span>
       <span className="hidden text-lg font-semibold tracking-[0.28em] text-slate-800 md:inline">
-        MYLENS
+      OptiLens
       </span>
     </Link>
   );
@@ -102,13 +95,6 @@ export default function SiteHeader({ rightSlot, cartCount = 0, className }: Site
           })}
         </nav>
         <div className="ml-auto flex items-center gap-2.5 text-stone-600 sm:gap-3">
-          <button
-            type="button"
-            className="rounded-full p-2 transition duration-200 ease-in-out hover:bg-stone-100/90 hover:text-[#2BBBAD]"
-            aria-label="Tìm kiếm"
-          >
-            <IconSearch className="h-5 w-5" />
-          </button>
           {rightSlot ?? (
             <>
               <Link

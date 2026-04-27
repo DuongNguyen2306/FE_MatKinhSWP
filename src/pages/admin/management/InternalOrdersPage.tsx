@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import { getInbounds } from "@/api/inboundApi";
@@ -18,7 +18,7 @@ import {
 import type { OrderKindFilter } from "@/lib/order-utils";
 import { normalizeRole } from "@/lib/role-routing";
 import { getOpsOrders } from "@/services/ops-orders.service";
-import { confirmOrder, fetchAllOrders, updateOrderStatus } from "@/services/order.service";
+import { confirmOrder, fetchAllOrders, fetchMyOrderDetail, updateOrderStatus } from "@/services/order.service";
 import { useAppSelector } from "@/store/hooks";
 import type { CustomerOrderListItem } from "@/types/order";
 
@@ -124,6 +124,17 @@ function readOrderId(order: CustomerOrderListItem): string {
   return typeof raw === "string" ? raw : "";
 }
 
+function readOrderFromDetailResponse(data: unknown): CustomerOrderListItem | null {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+  const rec = data as Record<string, unknown>;
+  if (rec.order && typeof rec.order === "object") {
+    return rec.order as CustomerOrderListItem;
+  }
+  return data as CustomerOrderListItem;
+}
+
 function readPaymentMethod(order: CustomerOrderListItem): string {
   const pay = order.payment as Record<string, unknown> | undefined;
   return String(pay?.method ?? "").toLowerCase();
@@ -135,9 +146,25 @@ function readPaymentStatus(order: CustomerOrderListItem): string {
 }
 
 function readCustomerLabel(order: CustomerOrderListItem): string {
+  const orderRecord = order as Record<string, unknown>;
+  const orderLevelNameKeys = ["name", "receiver_name", "recipient_name", "full_name", "customer_name"];
+  for (const key of orderLevelNameKeys) {
+    const value = orderRecord[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
   const user = order.user;
   if (user && typeof user === "object") {
     const u = user as Record<string, unknown>;
+    const userNameKeys = ["name", "full_name", "display_name", "username"];
+    for (const key of userNameKeys) {
+      const value = u[key];
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+    }
     if (typeof u.email === "string" && u.email.trim()) {
       return u.email.trim();
     }
@@ -196,12 +223,42 @@ const OPS_MANAGED_STATUSES = new Set([
 const SALES_MANAGED_STATUSES = new Set(["confirmed", "cancelled"]);
 
 function readLensWorksheet(order: CustomerOrderListItem): Record<string, unknown> | null {
-  const raw = (order as Record<string, unknown>).lens_worksheet;
-  return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
+  const rec = order as Record<string, unknown>;
+  const candidates = [rec.lens_worksheet, rec.lensWorksheet, rec.lens_params, rec.prescription];
+  for (const raw of candidates) {
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      return raw as Record<string, unknown>;
+    }
+  }
+  return null;
 }
 
 function readItems(order: CustomerOrderListItem): Array<Record<string, unknown>> {
-  return Array.isArray(order.items) ? (order.items as Array<Record<string, unknown>>) : [];
+  const rec = order as Record<string, unknown>;
+  const itemSources = [
+    order.items,
+    rec.order_items,
+    rec.orderItems,
+    rec.line_items,
+    rec.lineItems,
+    rec.products,
+    rec.lines,
+  ];
+  for (const src of itemSources) {
+    if (src && typeof src === "object" && !Array.isArray(src)) {
+      const nested = src as Record<string, unknown>;
+      if (Array.isArray(nested.items)) {
+        return nested.items as Array<Record<string, unknown>>;
+      }
+      if (Array.isArray(nested.data)) {
+        return nested.data as Array<Record<string, unknown>>;
+      }
+    }
+    if (Array.isArray(src)) {
+      return src as Array<Record<string, unknown>>;
+    }
+  }
+  return [];
 }
 
 function hasMeaningfulLensValue(raw: unknown): boolean {
@@ -260,14 +317,90 @@ function orderNeedsProcessing(order: CustomerOrderListItem): boolean {
 function itemVariantInfo(item: Record<string, unknown>): { name: string; sku: string; price: number | null; image: string } {
   const variantRaw = item.variant_id;
   const variant = variantRaw && typeof variantRaw === "object" ? (variantRaw as Record<string, unknown>) : null;
+  const variantAltRaw = item.variant;
+  const variantAlt = variantAltRaw && typeof variantAltRaw === "object" ? (variantAltRaw as Record<string, unknown>) : null;
+  const comboRaw = item.combo_id;
+  const combo = comboRaw && typeof comboRaw === "object" ? (comboRaw as Record<string, unknown>) : null;
+  const comboAltRaw = item.combo;
+  const comboAlt = comboAltRaw && typeof comboAltRaw === "object" ? (comboAltRaw as Record<string, unknown>) : null;
+  const variantResolved = variant ?? variantAlt;
+  const comboResolved = combo ?? comboAlt;
   const productRaw = variant?.product_id;
-  const product = productRaw && typeof productRaw === "object" ? (productRaw as Record<string, unknown>) : null;
-  const name = typeof product?.name === "string" ? product.name : "—";
-  const sku = typeof variant?.sku === "string" ? variant.sku : "—";
-  const price = typeof variant?.price === "number" ? variant.price : null;
-  const variantImage = Array.isArray(variant?.images) ? (variant.images.find((x): x is string => typeof x === "string" && Boolean(x.trim())) ?? "") : "";
+  const productAltRaw = variantAlt?.product_id;
+  const product =
+    (productRaw && typeof productRaw === "object" ? (productRaw as Record<string, unknown>) : null) ??
+    (productAltRaw && typeof productAltRaw === "object" ? (productAltRaw as Record<string, unknown>) : null);
+  const name =
+    (typeof item.name === "string" && item.name.trim()) ||
+    (typeof item.product_name === "string" && item.product_name.trim()) ||
+    (typeof item.variant_name === "string" && item.variant_name.trim()) ||
+    (typeof variantResolved?.name === "string" && variantResolved.name.trim()) ||
+    (typeof product?.name === "string" && product.name.trim()) ||
+    (typeof comboResolved?.name === "string" && comboResolved.name.trim()) ||
+    "—";
+  const sku = typeof variantResolved?.sku === "string" ? variantResolved.sku : "—";
+  const price = typeof variantResolved?.price === "number" ? variantResolved.price : null;
+  const variantImage = Array.isArray(variantResolved?.images) ? (variantResolved.images.find((x): x is string => typeof x === "string" && Boolean(x.trim())) ?? "") : "";
   const productImage = Array.isArray(product?.images) ? (product.images.find((x): x is string => typeof x === "string" && Boolean(x.trim())) ?? "") : "";
-  return { name, sku, price, image: variantImage || productImage || "" };
+  const comboImage = Array.isArray(comboResolved?.images) ? (comboResolved.images.find((x): x is string => typeof x === "string" && Boolean(x.trim())) ?? "") : "";
+  const directImage =
+    (typeof item.image === "string" && item.image.trim()) ||
+    (typeof item.thumbnail === "string" && item.thumbnail.trim()) ||
+    (typeof item.preview_image === "string" && item.preview_image.trim()) ||
+    "";
+  return { name, sku, price, image: directImage || variantImage || productImage || comboImage || "" };
+}
+
+function shortOrderId(id: string): string {
+  if (!id) return "—";
+  if (id.length <= 14) return id;
+  return `${id.slice(0, 6)}...${id.slice(-6)}`;
+}
+
+function readLensParamsPreview(order: CustomerOrderListItem): Record<string, unknown> | null {
+  const worksheet = readLensWorksheet(order);
+  if (worksheet && hasMeaningfulLensValue(worksheet)) {
+    return worksheet;
+  }
+  const rec = order as Record<string, unknown>;
+  const orderLevelLens = rec.lens_params;
+  if (orderLevelLens && typeof orderLevelLens === "object" && !Array.isArray(orderLevelLens) && hasMeaningfulLensValue(orderLevelLens)) {
+    return orderLevelLens as Record<string, unknown>;
+  }
+  const items = readItems(order);
+  for (const item of items) {
+    const lens = item.lens_params;
+    if (lens && typeof lens === "object" && !Array.isArray(lens) && hasMeaningfulLensValue(lens)) {
+      return lens as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function readFallbackItemsFromOrder(order: CustomerOrderListItem): Array<Record<string, unknown>> {
+  const rec = order as Record<string, unknown>;
+  const candidateName =
+    (typeof rec.item_name === "string" && rec.item_name.trim()) ||
+    (typeof rec.product_name === "string" && rec.product_name.trim()) ||
+    (typeof rec.variant_name === "string" && rec.variant_name.trim()) ||
+    "";
+  const candidateImage =
+    (typeof rec.item_image === "string" && rec.item_image.trim()) ||
+    (typeof rec.product_image === "string" && rec.product_image.trim()) ||
+    (typeof rec.thumbnail === "string" && rec.thumbnail.trim()) ||
+    (typeof rec.image === "string" && rec.image.trim()) ||
+    "";
+
+  if (!candidateName && !candidateImage) {
+    return [];
+  }
+
+  return [
+    {
+      name: candidateName || "Sản phẩm",
+      image: candidateImage,
+    },
+  ];
 }
 
 function extractReferenceOrderIds(inbound: Record<string, unknown>): string[] {
@@ -325,6 +458,18 @@ export default function InternalOrdersPage() {
     queryKey: ["orders", isOps ? "ops" : "all", page, limit, status, paymentMethod, paymentStatus, orderKind],
     queryFn: async () => {
       if (isOps) {
+        if (!status) {
+          // Khi filter "tất cả", dùng nguồn full list để tránh bị endpoint Ops chỉ trả về
+          // nhóm đơn đang xử lý và vô tình ẩn các đơn nội bộ khác.
+          return fetchAllOrders({
+            page,
+            limit,
+            status: undefined,
+            payment_method: paymentMethod || undefined,
+            payment_status: paymentStatus || undefined,
+            order_type: orderTypeApi,
+          });
+        }
         const normalizedStatus =
           status === "processing" ||
           status === "manufacturing" ||
@@ -376,6 +521,15 @@ export default function InternalOrdersPage() {
     () => toPagination(ordersQuery.data, page, limit, rows.length),
     [ordersQuery.data, page, limit, rows.length]
   );
+  const rowOrderIds = useMemo(() => rows.map((order) => readOrderId(order)), [rows]);
+  const rowDetailQueries = useQueries({
+    queries: rowOrderIds.map((orderId) => ({
+      queryKey: ["orders", "internal-list-detail", orderId],
+      enabled: Boolean(orderId),
+      staleTime: 60_000,
+      queryFn: () => fetchMyOrderDetail(orderId),
+    })),
+  });
 
   const inboundLinksQuery = useQuery({
     queryKey: ["inbounds", "linked-orders", page, limit, status, orderKind],
@@ -568,17 +722,28 @@ export default function InternalOrdersPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((order) => {
+              {rows.map((order, rowIdx) => {
                 const id = readOrderId(order);
+                const rowDetailOrder = readOrderFromDetailResponse(rowDetailQueries[rowIdx]?.data);
                 const statusValue = normalizeOrderStatus(String(order.status ?? ""));
                 const payMethod = readPaymentMethod(order);
                 const payStatus = readPaymentStatus(order);
-                const lensWorksheet = readLensWorksheet(order);
                 const items = readItems(order);
-                const needsProcessing = orderNeedsProcessing(order);
+                const detailItems = rowDetailOrder ? readItems(rowDetailOrder) : [];
+                const displayItems =
+                  items.length > 0
+                    ? items
+                    : detailItems.length > 0
+                      ? detailItems
+                      : readFallbackItemsFromOrder(order);
+                const lensPreview =
+                  readLensParamsPreview(order) ??
+                  (rowDetailOrder ? readLensParamsPreview(rowDetailOrder) : null);
+                const needsProcessing = orderNeedsProcessing(rowDetailOrder ?? order);
                 const orderType = String(order.order_type ?? "stock").toLowerCase();
                 const linkedInbound = inboundByOrderId.get(id);
                 const linkedInboundStatus = linkedInbound?.status ?? "";
+                const isProcessing = statusValue === "processing";
                 const inboundReady = orderType !== "pre_order" || linkedInboundStatus === "RECEIVED" || linkedInboundStatus === "COMPLETED";
                 const inboundStatusText =
                   orderType !== "pre_order"
@@ -601,8 +766,15 @@ export default function InternalOrdersPage() {
                   : nextStatuses.filter((s) => s !== "manufacturing");
                 const nextStatusesVisible = nextStatusesFiltered.filter((s) => !(orderType === "pre_order" && s === "received" && !inboundReady));
                 return (
-                  <tr key={id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">
-                    <td className="px-4 py-3 font-mono text-xs text-slate-700">{id || "—"}</td>
+                  <tr
+                    key={id}
+                    className={`border-b border-slate-100 last:border-0 hover:bg-slate-50/70 ${
+                      isProcessing ? "bg-emerald-100/70" : ""
+                    }`}
+                  >
+                    <td className="px-4 py-3 font-mono text-xs text-slate-700" title={id || "—"}>
+                      {shortOrderId(id)}
+                    </td>
                     <td className="px-4 py-3">{readCustomerLabel(order)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-900">
                       {formatMoney(order.final_amount ?? order.total_amount)}
@@ -616,11 +788,19 @@ export default function InternalOrdersPage() {
                     </td>
                     <td className="px-4 py-3">{formatDate(order.created_at)}</td>
                     <td className="px-4 py-3 text-xs text-slate-600">
-                      {lensWorksheet ? <pre className="max-w-[250px] overflow-auto whitespace-pre-wrap">{JSON.stringify(lensWorksheet, null, 2)}</pre> : "—"}
+                      {lensPreview ? (
+                        <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700">
+                          Có
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600">
+                          Không
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-700">
                       <div className="space-y-2">
-                        {items.map((item, idx) => {
+                        {displayItems.map((item, idx) => {
                           const info = itemVariantInfo(item);
                           return (
                             <div key={String(item._id ?? item.id ?? idx)} className="rounded border border-slate-200 p-2">
@@ -628,7 +808,6 @@ export default function InternalOrdersPage() {
                                 {info.image ? <img src={info.image} alt={info.name} className="h-8 w-8 object-cover" /> : null}
                                 <div className="min-w-0">
                                   <p className="truncate font-semibold text-slate-800">{info.name}</p>
-                                  <p className="text-slate-500">SKU: {info.sku} | Giá: {formatMoney(info.price ?? undefined)}</p>
                                 </div>
                               </div>
                             </div>

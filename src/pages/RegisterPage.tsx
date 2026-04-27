@@ -10,7 +10,7 @@ export default function RegisterPage() {
       title="Đăng ký email"
       description="Hãy đăng ký để được hưởng nhiều đặc quyền riêng dành cho bạn"
       imageSrc={REGISTER_HERO}
-      imageAlt="Model đeo kính — MYLENS"
+      imageAlt="Model đeo kính — OptiLens"
       titleAlign="center"
     >
       <RegisterForm />

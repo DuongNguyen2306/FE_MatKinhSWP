@@ -10,7 +10,7 @@ export default function InternalDashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-slate-900">Internal Dashboard</h1>
+      <h1 className="text-2xl font-bold text-slate-900">Trang quản lý nội bộ</h1>
       <p className="mt-1 text-sm text-slate-600">Khu vực nghiệp vụ nội bộ theo quyền của {String(role ?? "unknown")}.</p>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -31,7 +31,7 @@ export default function InternalDashboardPage() {
 
         {canManageCatalog(role) && (
           <Link to="/admin/catalog/products" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:border-[#2bb6a3]">
-            <p className="text-sm font-semibold text-slate-900">Catalog</p>
+            <p className="text-sm font-semibold text-slate-900">Danh mục</p>
             <p className="mt-1 text-xs text-slate-500">Quản lý sản phẩm, variants, categories, brands, models, combos.</p>
           </Link>
         )}

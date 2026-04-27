@@ -123,7 +123,8 @@ export default function CartPage() {
     lineKey: string,
     row: Record<string, unknown>,
     quantity: number,
-    lensParams?: LensParams | null
+    lensParams?: LensParams | null,
+    successMessage?: string
   ) => {
     const comboId = cartLineComboId(row);
     const itemId = cartLineId(row);
@@ -150,6 +151,9 @@ export default function CartPage() {
         await updateCartItem(itemId, payload);
       }
       await queryClient.invalidateQueries({ queryKey: ["cart"] });
+      if (successMessage) {
+        toast.success(successMessage);
+      }
     } catch (e) {
       const msg = getApiErrorMessage(e, "Không cập nhật được giỏ hàng.");
       setLineMessage(key, msg);
@@ -347,7 +351,7 @@ export default function CartPage() {
                             initialValue={currentLensParams}
                             submitting={busy}
                             onSubmit={(lensParams) => {
-                              void patchLine(key, row, qty, lensParams);
+                              void patchLine(key, row, qty, lensParams, "Đã lưu thành công.");
                             }}
                           />
                         </div>
@@ -416,7 +420,7 @@ export default function CartPage() {
                       toast.error("Giỏ hàng thiếu mã dòng hợp lệ. Vui lòng tải lại trang.");
                       return;
                     }
-                    navigate(`/checkout?lines=${encodeURIComponent(keys.join(","))}`);
+                    navigate(`/checkout/confirm?lines=${encodeURIComponent(keys.join(","))}`);
                   }}
                   className={cn(
                     "inline-flex h-11 w-full items-center justify-center rounded-full text-sm font-semibold text-white transition",
@@ -424,7 +428,7 @@ export default function CartPage() {
                   )}
                   disabled={total <= 0}
                 >
-                  Thanh toán ngay
+                  Tiếp tục đặt hàng
                 </button>
               </div>
             </aside>

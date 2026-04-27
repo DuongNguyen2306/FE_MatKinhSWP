@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { X } from "lucide-react";
@@ -58,13 +58,47 @@ function getOrderId(req: ReturnRequest): string {
   return typeof raw === "string" ? raw : "—";
 }
 function getCustomerLabel(req: ReturnRequest): string {
+  const requestedBy = req.requested_by && typeof req.requested_by === "object"
+    ? (req.requested_by as Record<string, unknown>)
+    : null;
+  const requestedProfile = requestedBy?.profile && typeof requestedBy.profile === "object"
+    ? (requestedBy.profile as Record<string, unknown>)
+    : null;
+  const requestedNameKeys = ["full_name", "name", "display_name", "username"];
+  for (const key of requestedNameKeys) {
+    const direct = requestedBy?.[key];
+    if (typeof direct === "string" && direct.trim()) {
+      return direct.trim();
+    }
+    const inProfile = requestedProfile?.[key];
+    if (typeof inProfile === "string" && inProfile.trim()) {
+      return inProfile.trim();
+    }
+  }
+
   const uid = req.order_id && typeof req.order_id === "object"
     ? (req.order_id as Record<string, unknown>).user_id
     : null;
+  const orderObj = req.order_id && typeof req.order_id === "object"
+    ? (req.order_id as Record<string, unknown>)
+    : null;
+  const orderNameKeys = ["name", "receiver_name", "recipient_name", "full_name", "customer_name"];
+  for (const key of orderNameKeys) {
+    const value = orderObj?.[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
   if (uid && typeof uid === "object") {
     const u = uid as Record<string, unknown>;
-    if (typeof u.email === "string") return u.email;
-    if (typeof u.name === "string") return u.name;
+    const userNameKeys = ["name", "full_name", "display_name", "username"];
+    for (const key of userNameKeys) {
+      const value = u[key];
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+    }
+    if (typeof u.email === "string" && u.email.trim()) return u.email.trim();
   }
   return "—";
 }
@@ -265,7 +299,6 @@ function RefundDialog({
   onSuccess,
 }: { req: ReturnRequest; onClose: () => void; onSuccess: () => void }) {
   const condition = String(req.condition_at_receipt ?? "");
-  const willRestock = condition === "NEW";
   const mutation = useMutation({
     mutationFn: () => refundReturn(getReturnId(req)),
     onSuccess: (res) => {
@@ -294,9 +327,6 @@ function RefundDialog({
               <span className="text-slate-500">Tình trạng hàng: </span>
               <strong>{(CONDITION_OPTS.find((o) => o.value === condition)?.label ?? condition) || "—"}</strong>
             </p>
-            <p className={willRestock ? "font-medium text-emerald-700" : "text-orange-700"}>
-              {willRestock ? "✓ Sẽ cộng lại kho" : "✕ Không cộng lại kho (hàng hỏng / đã dùng)"}
-            </p>
           </div>
           <p className="text-slate-600">Sau khi hoàn tiền, hệ thống sẽ tính và trả tiền về cho khách hàng.</p>
         </div>
@@ -319,14 +349,15 @@ function RefundDialog({
 /* ─── main ─── */
 export default function AdminReturnsPage() {
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
   const role = useAppSelector((s) => normalizeRole(s.auth.user?.role) ?? "");
   /** operations, manager, admin có thể approve/receive/reject */
   const canProcess = role === "operations" || role === "manager" || role === "admin";
   /** Chỉ manager/admin được hoàn tiền */
   const canRefund = role === "manager" || role === "admin";
 
-  const [statusFilter, setStatusFilter] = useState("");
-  const [orderIdFilter, setOrderIdFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") ?? "");
+  const [orderIdFilter, setOrderIdFilter] = useState(() => searchParams.get("order_id") ?? "");
   const [page, setPage] = useState(1);
 
   const [approveId, setApproveId]     = useState<string | null>(null);

@@ -93,6 +93,58 @@ function readMaybeString(v: unknown): string | null {
   return s ? s : null;
 }
 
+function resolvePersonName(source: Record<string, unknown> | null | undefined): string | null {
+  if (!source) return null;
+  const profile = source.profile && typeof source.profile === "object"
+    ? (source.profile as Record<string, unknown>)
+    : null;
+  const keys = ["full_name", "name", "display_name", "username"];
+  for (const key of keys) {
+    const direct = source[key];
+    if (typeof direct === "string" && direct.trim()) {
+      return direct.trim();
+    }
+    const nested = profile?.[key];
+    if (typeof nested === "string" && nested.trim()) {
+      return nested.trim();
+    }
+  }
+  if (typeof source.email === "string" && source.email.trim()) {
+    return source.email.trim();
+  }
+  return null;
+}
+
+function resolveHistoryActorName(req: Record<string, unknown>, actorRaw: unknown): string {
+  const actorId = typeof actorRaw === "string" ? actorRaw.trim() : "";
+  if (!actorId) {
+    return "Hệ thống";
+  }
+
+  const requestedBy = req.requested_by && typeof req.requested_by === "object"
+    ? (req.requested_by as Record<string, unknown>)
+    : null;
+  const handledBy = req.handled_by && typeof req.handled_by === "object"
+    ? (req.handled_by as Record<string, unknown>)
+    : null;
+  const orderObj = req.order_id && typeof req.order_id === "object"
+    ? (req.order_id as Record<string, unknown>)
+    : null;
+  const orderUser = orderObj?.user_id && typeof orderObj.user_id === "object"
+    ? (orderObj.user_id as Record<string, unknown>)
+    : null;
+
+  const pools = [requestedBy, handledBy, orderUser];
+  for (const person of pools) {
+    const personId = typeof person?._id === "string" ? person._id.trim() : "";
+    if (personId && personId === actorId) {
+      return resolvePersonName(person) ?? "Hệ thống";
+    }
+  }
+
+  return "Hệ thống";
+}
+
 function parseRestockLog(value: unknown): RestockLogItem[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -232,7 +284,6 @@ function RejectModal({ rid, onClose, onSuccess }: { rid: string; onClose: () => 
 function RefundConfirm({ rid, condition, onClose, onSuccess }: {
   rid: string; condition: string; onClose: () => void; onSuccess: (result: CompleteReturnResponse) => void;
 }) {
-  const willRestock = condition === "NEW";
   const mut = useMutation({
     mutationFn: async () => {
       try {
@@ -265,9 +316,6 @@ function RefundConfirm({ rid, condition, onClose, onSuccess }: {
             <p>
               <span className="text-slate-500">Tình trạng hàng: </span>
               <strong>{(CONDITION_LABELS[condition] ?? condition) || "—"}</strong>
-            </p>
-            <p className={willRestock ? "font-medium text-emerald-700" : "text-orange-700"}>
-              {willRestock ? "✓ Sẽ cộng lại kho" : "✕ Không cộng lại kho (hàng hỏng / đã dùng)"}
             </p>
           </div>
           <p className="text-slate-600">Hệ thống sẽ tính và hoàn tiền về tài khoản khách hàng. Đơn hàng gốc chuyển sang trạng thái hoàn trả.</p>
@@ -480,11 +528,6 @@ export default function AdminReturnDetailPage() {
                   </h2>
                   <p className={`text-base font-bold ${condition === "NEW" ? "text-emerald-700" : "text-orange-700"}`}>
                     {(CONDITION_LABELS[condition] ?? condition) || "—"}
-                  </p>
-                  <p className={`mt-1 text-sm ${condition === "NEW" ? "text-emerald-600" : "text-orange-600"}`}>
-                    {condition === "NEW"
-                      ? "Hàng còn nguyên vẹn → sẽ được cộng lại vào kho sau khi hoàn tiền."
-                      : "Hàng bị hỏng / đã dùng → không cộng lại kho."}
                   </p>
                   {canRefund ? (
                     <p className="mt-2 text-xs text-slate-500">Xem xét và nhấn <strong>Hoàn tiền</strong> để hoàn tất.</p>
@@ -717,18 +760,7 @@ export default function AdminReturnDetailPage() {
                 ) : (
                   <ol className="space-y-4">
                     {timelineEntries.map((h, i) => {
-                      const action = String(h.action ?? "").toUpperCase();
-                      const ACTION_LABELS: Record<string, string> = {
-                        RETURN_REQUESTED: "Khách yêu cầu trả",
-                        APPROVED:         "Đã chấp nhận",
-                        INSPECTING:       "Đã nhận hàng & kiểm tra",
-                        REFUNDED:         "Đã hoàn tiền",
-                        REJECTED:         "Đã từ chối",
-                        INBOUND_CREATED_FROM_RETURN: "Hệ thống đã tạo phiếu nhập kho tự động từ hoàn trả",
-                        RECEIVED:         "Đã nhận hàng",    // legacy
-                        PROCESSING:       "Đang xử lý",      // legacy
-                        COMPLETED:        "Hoàn tất",        // legacy
-                      };
+                      const actorName = resolveHistoryActorName(req, h.actor);
                       const isLast = i === timelineEntries.length - 1;
                       return (
                         <li key={i} className="flex items-start gap-3 text-sm">
@@ -737,10 +769,8 @@ export default function AdminReturnDetailPage() {
                             {!isLast ? <div className="mt-1 w-0.5 flex-1 bg-slate-100" style={{ minHeight: 24 }} /> : null}
                           </div>
                           <div className="pb-1">
-                            <p className="font-semibold text-slate-800">{ACTION_LABELS[action] ?? String(h.action ?? "—")}</p>
-                            {h.actor ? <p className="text-xs text-slate-500">Bởi: {String(h.actor)}</p> : null}
+                            <p className="font-semibold text-slate-800">{actorName}</p>
                             <p className="text-xs text-slate-400">{fmtDate(h.at as string)}</p>
-                            {h.note ? <p className="mt-0.5 text-xs italic text-slate-600">{String(h.note)}</p> : null}
                           </div>
                         </li>
                       );

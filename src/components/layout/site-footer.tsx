@@ -38,7 +38,7 @@ export default function SiteFooter({ className }: SiteFooterProps) {
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-4">
-            <h3 className="font-display text-2xl font-light tracking-wide text-stone-100">MYLENS</h3>
+            <h3 className="font-display text-2xl font-light tracking-wide text-stone-100">OptiLens</h3>
             <p className="text-sm leading-relaxed text-stone-400">
               Hệ thống kính mắt chuyên nghiệp với nhiều năm kinh nghiệm. Chúng tôi cam kết mang đến trải nghiệm mua sắm tốt nhất cho bạn.
             </p>
@@ -64,7 +64,7 @@ export default function SiteFooter({ className }: SiteFooterProps) {
                 <IconGlobe className="mt-0.5 h-4 w-4 shrink-0 text-[#2BBBAD]" />
                 <div>
                   <p className="font-medium text-stone-200">Email</p>
-                  <p>MYLENS@gmail.com</p>
+                  <p>OptiLens@gmail.com</p>
                 </div>
               </li>
             </ul>
@@ -145,7 +145,7 @@ export default function SiteFooter({ className }: SiteFooterProps) {
 
         <div className="mt-12 border-t border-stone-600/50 pt-8">
           <p className="text-center text-sm text-stone-500">
-            © {new Date().getFullYear()} Mylens. Tất cả quyền được bảo lưu.
+            © {new Date().getFullYear()} OptiLens. Tất cả quyền được bảo lưu.
           </p>
         </div>
       </div>

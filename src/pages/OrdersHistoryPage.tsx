@@ -11,6 +11,7 @@ import type { CustomerOrderListItem } from "@/types/order";
 import { ORDER_STATUS_FILTER_VALUES } from "@/types/order";
 import StoreHeader from "@/components/home/store-header";
 import SiteFooter from "@/components/layout/site-footer";
+import CancelOrderModal from "@/components/orders/CancelOrderModal";
 import { useAppSelector } from "@/store/hooks";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +24,7 @@ const STATUS_LABELS: Record<string, string> = {
   confirmed: "Đã xác nhận",
   processing: "Đang xử lý",
   fulfilled: "Hoàn tất gia công",
-  manufacturing: "Đang gia công tròng",
+  manufacturing: "Đang gia công",
   received: "Hàng đã về kho",
   packed: "Đã đóng gói",
   shipping: "Đang giao",
@@ -170,13 +171,15 @@ export default function OrdersHistoryPage() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [search, setSearch] = useState("");
   const [orderKind, setOrderKind] = useState<OrderKindFilter>("");
+  const [cancelTargetId, setCancelTargetId] = useState("");
 
   const isCustomer = (user?.role ?? "").toLowerCase() === "customer";
 
   const cancelMutation = useMutation({
-    mutationFn: (orderId: string) => cancelMyOrder(orderId),
+    mutationFn: ({ orderId, reason }: { orderId: string; reason?: string }) => cancelMyOrder(orderId, reason),
     onSuccess: () => {
       toast.success("Đã gửi yêu cầu hủy đơn.");
+      setCancelTargetId("");
       queryClient.invalidateQueries({ queryKey: ["orders", "my"] });
     },
     onError: (e) => toast.error(getApiErrorMessage(e, "Không thể hủy đơn hàng.")),
@@ -212,6 +215,14 @@ export default function OrdersHistoryPage() {
 
   const allItems = ordersQuery.data?.items ?? [];
   const pg = ordersQuery.data?.pagination;
+  const resolvedTotalPages = useMemo(() => {
+    if (!pg) return 1;
+    const byApi = Number(pg.total_pages) || 0;
+    const total = Number(pg.total) || 0;
+    const byTotal = Math.max(1, Math.ceil(total / Math.max(1, limit)));
+    return Math.max(1, byApi, byTotal);
+  }, [pg, limit]);
+  const resolvedPage = pg?.page ?? page;
 
   // Client-side filter bằng search (theo mã đơn)
   const items = useMemo(() => {
@@ -396,7 +407,7 @@ export default function OrdersHistoryPage() {
                               <button
                                 type="button"
                                 disabled={cancelMutation.isPending}
-                                onClick={() => cancelMutation.mutate(oid)}
+                                onClick={() => setCancelTargetId(oid)}
                                 className="inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-60"
                               >
                                 <X className="h-3.5 w-3.5" />
@@ -419,22 +430,22 @@ export default function OrdersHistoryPage() {
                   key={order._id ?? order.id ?? idx}
                   order={order}
                   cancelling={cancelMutation.isPending}
-                  onCancel={(id) => cancelMutation.mutate(id)}
+                  onCancel={(id) => setCancelTargetId(id)}
                 />
               ))}
             </div>
 
             {/* Pagination */}
-            {pg && pg.total_pages > 0 && (
+            {pg && resolvedTotalPages > 0 && (
               <div className="mt-6 flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
                 <p className="text-sm text-slate-500">
-                  Trang <span className="font-semibold text-slate-800">{pg.page}</span> / {pg.total_pages} —{" "}
+                  Trang <span className="font-semibold text-slate-800">{resolvedPage}</span> / {resolvedTotalPages} —{" "}
                   <span className="font-semibold text-slate-800">{pg.total}</span> đơn
                 </p>
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    disabled={page <= 1 || ordersQuery.isFetching}
+                    disabled={resolvedPage <= 1 || ordersQuery.isFetching}
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
                   >
@@ -442,8 +453,8 @@ export default function OrdersHistoryPage() {
                   </button>
                   <button
                     type="button"
-                    disabled={page >= pg.total_pages || ordersQuery.isFetching}
-                    onClick={() => setPage((p) => p + 1)}
+                    disabled={resolvedPage >= resolvedTotalPages || ordersQuery.isFetching}
+                    onClick={() => setPage((p) => Math.min(resolvedTotalPages, p + 1))}
                     className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
                   >
                     Sau <ChevronRight className="h-4 w-4" />
@@ -454,6 +465,16 @@ export default function OrdersHistoryPage() {
           </>
         )}
       </main>
+
+      <CancelOrderModal
+        open={Boolean(cancelTargetId)}
+        loading={cancelMutation.isPending}
+        onClose={() => setCancelTargetId("")}
+        onConfirm={(reason) => {
+          if (!cancelTargetId) return;
+          cancelMutation.mutate({ orderId: cancelTargetId, reason });
+        }}
+      />
 
       <SiteFooter />
     </div>

@@ -113,7 +113,7 @@ export default function ProductListPage() {
       <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Sản phẩm</h1>
-          <p className="text-sm text-slate-500">Danh sách (public API). Tạo mới: multipart.</p>
+          <p className="text-sm text-slate-500">Danh sách sản phẩm</p>
         </div>
         <Link
           to="/admin/catalog/products/new"

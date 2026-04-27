@@ -1,4 +1,5 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import RequireAuth from "@/components/routing/RequireAuth";
 import RequireRole from "@/components/routing/RequireRole";
@@ -29,8 +30,10 @@ import ForbiddenPage from "@/pages/ForbiddenPage";
 import HomePage from "@/pages/HomePage";
 import ProductsPage from "@/pages/ProductsPage";
 import ProductDetailPage from "@/pages/ProductDetailPage";
+import ProductIntroPage from "@/pages/ProductIntroPage";
 import CartPage from "@/pages/CartPage";
 import CheckoutPage from "@/pages/CheckoutPage";
+import OrderConfirmPage from "@/pages/OrderConfirmPage";
 import CheckoutReturnPage from "@/pages/CheckoutReturnPage";
 import CheckoutSuccessPage from "@/pages/CheckoutSuccessPage";
 import CheckoutFailPage from "@/pages/CheckoutFailPage";
@@ -48,13 +51,25 @@ import CustomerLayout from "@/pages/layouts/CustomerLayout";
 import InternalLayout from "@/pages/layouts/InternalLayout";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 
+function ScrollToTopOnNavigate() {
+  const { pathname, search } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [pathname, search]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <>
+      <ScrollToTopOnNavigate />
       <Routes>
         <Route element={<CustomerLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/products" element={<ProductsPage />} />
+          <Route path="/products-intro" element={<ProductIntroPage />} />
           <Route path="/products/:slug" element={<ProductDetailPage />} />
           <Route path="/combos" element={<CombosPage />} />
           <Route path="/combos/:slug" element={<ComboDetailPage />} />
@@ -82,6 +97,7 @@ export default function App() {
           <Route element={<RequireRole allowedRoles={["customer"]} />}>
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/cart" element={<CartPage />} />
+            <Route path="/checkout/confirm" element={<OrderConfirmPage />} />
             <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/order-success" element={<OrderSuccessPage />} />
             <Route path="/orders" element={<OrdersHistoryPage />} />

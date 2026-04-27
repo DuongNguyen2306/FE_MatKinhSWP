@@ -295,7 +295,7 @@ export default function StatisticsDashboardPage() {
   return (
     <div className="space-y-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-slate-900">Dashboard thống kê</h1>
+        <h1 className="text-3xl font-bold text-slate-900">Bảng thống kê</h1>
         <p className="mt-1 text-sm text-slate-600">Tổng hợp doanh thu, đơn hàng và tồn kho theo thời gian.</p>
       </div>
 
@@ -315,9 +315,9 @@ export default function StatisticsDashboardPage() {
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value as "day" | "week" | "month")}
           >
-            <option value="day">day</option>
-            <option value="week">week</option>
-            <option value="month">month</option>
+            <option value="day">Ngày</option>
+            <option value="week">Tuần</option>
+            <option value="month">Tháng</option>
           </select>
         </div>
         <div className="flex items-end">
@@ -447,7 +447,7 @@ export default function StatisticsDashboardPage() {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-md">
-          <h2 className="text-2xl font-bold text-slate-900">Phễu theo trạng thái</h2>
+          <h2 className="text-2xl font-bold text-slate-900">Biểu đồ trạng thái</h2>
           <p className="mt-1 text-sm text-slate-500">4 trạng thái quan trọng nhất để theo dõi vận hành.</p>
           <div className="mt-5 h-[320px]">
             {funnelQuery.isPending ? (

@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import type { Combo } from "@/types/combo";
 import { comboPreviewImage } from "@/lib/combo-display";
 
-/** Banner tách trái ảnh / phải nội dung nền beige — đúng layout mẫu MYLENS. */
+/** Banner tách trái ảnh / phải nội dung nền beige — đúng layout mẫu OptiLens. */
 const HERO_MODEL =
   "https://images.unsplash.com/photo-1469334031218-e382a71b716b?auto=format&fit=crop&w=1200&q=80";
 /** Banner giữa trang — file `public/images/banner2.jpg`. */
@@ -37,7 +37,7 @@ function SectionLinks({ className }: { className?: string }) {
   const links = [
     { label: "Gọng kính", to: "/products?type=frame" },
     { label: "Tròng kính", to: "/products?type=lens" },
-    { label: "Kính râm", to: "/products?search=kinh%20ram" },
+    { label: "Phụ kiện", to: "/products?type=accessory" },
     { label: "Xem tất cả →", to: "/products" },
   ];
   return (
@@ -147,7 +147,7 @@ export default function HomePage() {
           <div className="group relative min-h-[300px] overflow-hidden transition-shadow duration-500 ease-out hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.35)] lg:min-h-[520px] lg:hover:ring-1 lg:hover:ring-inset lg:hover:ring-white/12">
             <img
               src={HERO_MODEL}
-              alt="MYLENS — Bộ sưu tập mới"
+              alt="OptiLens — Bộ sưu tập mới"
               className="absolute inset-0 z-0 h-full w-full object-cover object-center will-change-transform brightness-[0.92] contrast-[1.03] saturate-[1.02] transition-[transform,filter,box-shadow] duration-[1.1s] ease-out motion-reduce:transition-none group-hover:scale-105 group-hover:brightness-100 group-hover:contrast-[1.04] group-hover:duration-1000 motion-reduce:group-hover:scale-100 motion-reduce:group-hover:brightness-[0.92] md:group-hover:scale-[1.04]"
             />
             <div
@@ -176,7 +176,7 @@ export default function HomePage() {
                 <span className="mt-1 block text-stone-300/95">cao cấp cho bạn</span>
               </h1>
               <p className="mt-5 max-w-md text-sm leading-relaxed text-stone-400">
-                Cân bằng thẩm mỹ &amp; trải nghiệm đeo — lựa chọn gọng, tròng và dịch vụ cá nhân hóa tại MYLENS.
+                Cân bằng thẩm mỹ &amp; trải nghiệm đeo — lựa chọn gọng, tròng và dịch vụ cá nhân hóa tại OptiLens.
               </p>
             </div>
             <div className="relative z-10 mt-10 grid gap-3 sm:grid-cols-3">
@@ -223,7 +223,7 @@ export default function HomePage() {
                 title={p.name}
                 priceText={formatPriceVnd(p.price)}
                 imageUrl={p.image}
-                badge="MYLENS"
+                badge="OptiLens"
               />
             ))}
           </div>
@@ -243,7 +243,7 @@ export default function HomePage() {
       <div className="relative w-full overflow-hidden">
         <img
           src={MID_BANNER}
-          alt="Bộ sưu tập MYLENS"
+          alt="Bộ sưu tập OptiLens"
           className="h-52 w-full object-cover sm:h-64 md:h-80 lg:h-96"
         />
         <div

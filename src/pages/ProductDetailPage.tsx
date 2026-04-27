@@ -21,8 +21,10 @@ import type { PaymentMethod, ShippingMethod } from "@/types/shop";
 import StoreHeader from "@/components/home/store-header";
 import SiteFooter from "@/components/layout/site-footer";
 import ShopShowcaseCard from "@/components/shop/shop-showcase-card";
+import LensParamsEditor from "@/components/cart/LensParamsEditor";
 import { Button } from "@/components/ui/button";
 import { useAppSelector } from "@/store/hooks";
+import type { LensParams } from "@/types/shop";
 
 function formatPriceVnd(value: number) {
   if (!Number.isFinite(value) || value < 0) {
@@ -52,6 +54,26 @@ function readProfilePhone(userLike: unknown): string {
   return "";
 }
 
+function readProfileReceiverName(userLike: unknown): string {
+  if (!userLike || typeof userLike !== "object") return "";
+  const u = userLike as Record<string, unknown>;
+  if (typeof u.full_name === "string" && u.full_name.trim()) return u.full_name.trim();
+  const first = typeof u.first_name === "string" ? u.first_name.trim() : "";
+  const last = typeof u.last_name === "string" ? u.last_name.trim() : "";
+  if (first || last) return [first, last].filter(Boolean).join(" ").trim();
+  if (typeof u.name === "string" && u.name.trim()) return u.name.trim();
+  const profile = u.profile;
+  if (profile && typeof profile === "object") {
+    const p = profile as Record<string, unknown>;
+    if (typeof p.full_name === "string" && p.full_name.trim()) return p.full_name.trim();
+    const pFirst = typeof p.first_name === "string" ? p.first_name.trim() : "";
+    const pLast = typeof p.last_name === "string" ? p.last_name.trim() : "";
+    if (pFirst || pLast) return [pFirst, pLast].filter(Boolean).join(" ").trim();
+    if (typeof p.name === "string" && p.name.trim()) return p.name.trim();
+  }
+  return "";
+}
+
 function defaultAddressFromList(addresses: unknown): string {
   if (!Array.isArray(addresses)) return "";
   const list = addresses as Array<Record<string, unknown>>;
@@ -62,6 +84,21 @@ function defaultAddressFromList(addresses: unknown): string {
     .join(", ");
   const full = preferred.address ?? preferred.full_address ?? fullFromParts;
   return typeof full === "string" ? full.trim() : "";
+}
+
+function defaultReceiverNameFromList(addresses: unknown): string {
+  if (!Array.isArray(addresses)) return "";
+  const list = addresses as Array<Record<string, unknown>>;
+  const preferred = list.find((addr) => Boolean(addr.is_default)) ?? list[0];
+  if (!preferred) return "";
+  const keys = ["receiver_name", "recipient_name", "full_name", "name"];
+  for (const key of keys) {
+    const raw = preferred[key];
+    if (typeof raw === "string" && raw.trim()) {
+      return raw.trim();
+    }
+  }
+  return "";
 }
 
 const PRODUCT_TYPE_LABEL: Record<string, string> = {
@@ -152,11 +189,14 @@ export default function ProductDetailPage() {
   const authUser = useAppSelector((s) => s.auth.user);
   const [quantity, setQuantity] = useState(1);
   const [preorderPhone, setPreorderPhone] = useState("");
+  const [preorderReceiverName, setPreorderReceiverName] = useState("");
   const [preorderAddress, setPreorderAddress] = useState("");
   const [preorderPaymentMethod, setPreorderPaymentMethod] = useState<PaymentMethod>("momo");
   const [preorderShippingMethod, setPreorderShippingMethod] = useState<ShippingMethod>("ship");
   const [adding, setAdding] = useState(false);
   const [buyingNow, setBuyingNow] = useState(false);
+  const [savedLensParams, setSavedLensParams] = useState<LensParams | null>(null);
+  const [lensParamsOpen, setLensParamsOpen] = useState(false);
 
   const detailQuery = useQuery({
     queryKey: ["product", "detail", slug],
@@ -214,6 +254,11 @@ export default function ProductDetailPage() {
       return first;
     });
   }, [variants]);
+
+  useEffect(() => {
+    setSavedLensParams(null);
+    setLensParamsOpen(false);
+  }, [slug]);
 
   const heroImage = useMemo(() => {
     if (!product) {
@@ -295,6 +340,7 @@ export default function ProductDetailPage() {
 
   const selectedPrice = selectedVariant ? variantPrice(selectedVariant) : 0;
   const profilePhone = readProfilePhone(authUser);
+  const profileReceiverName = readProfileReceiverName(authUser);
   const needPreorderPhoneInput = profilePhone.length === 0;
 
   useEffect(() => {
@@ -305,6 +351,16 @@ export default function ProductDetailPage() {
       }
     }
   }, [addressesQuery.data, preorderAddress]);
+
+  useEffect(() => {
+    if (preorderReceiverName.trim()) {
+      return;
+    }
+    const inferred = profileReceiverName || defaultReceiverNameFromList(addressesQuery.data);
+    if (inferred) {
+      setPreorderReceiverName(inferred);
+    }
+  }, [addressesQuery.data, preorderReceiverName, profileReceiverName]);
 
   const productTags = useMemo(() => {
     if (!product) {
@@ -318,6 +374,24 @@ export default function ProductDetailPage() {
     }
     return tags.slice(0, 1);
   }, [product]);
+
+  const isLensProduct = useMemo(() => {
+    if (!product) {
+      return false;
+    }
+    const t = (product as Record<string, unknown>).type;
+    return typeof t === "string" && t.toLowerCase() === "lens";
+  }, [product]);
+
+  const lensParamsPayload: LensParams | Record<string, never> = useMemo(() => {
+    if (!isLensProduct) {
+      return {};
+    }
+    if (savedLensParams && Object.keys(savedLensParams).length > 0) {
+      return savedLensParams;
+    }
+    return {};
+  }, [isLensProduct, savedLensParams]);
 
   const stockLabel = (() => {
     if (!selectedVariant) {
@@ -361,7 +435,7 @@ export default function ProductDetailPage() {
       await postCartItem({
         variant_id: selectedVariantId,
         quantity: Math.max(1, quantity),
-        lens_params: {},
+        lens_params: lensParamsPayload,
       });
       await queryClient.invalidateQueries({ queryKey: ["cart"] });
       if (showSuccessToast) {
@@ -405,12 +479,18 @@ export default function ProductDetailPage() {
           toast.error("Vui lòng nhập địa chỉ giao hàng cho đơn đặt trước.");
           return;
         }
+        const receiverNameForPreorder = preorderReceiverName.trim() || profileReceiverName.trim();
+        if (!receiverNameForPreorder) {
+          toast.error("Vui lòng nhập tên người nhận cho đơn đặt trước.");
+          return;
+        }
         const res = await postPreorderNow({
           shipping_address: preorderAddress.trim(),
           shipping_method: preorderShippingMethod,
           payment_method: preorderPaymentMethod,
+          name: receiverNameForPreorder,
           phone: phoneForPreorder,
-          items: [{ variant_id: selectedVariantId, quantity: Math.max(1, quantity), lens_params: {} }],
+          items: [{ variant_id: selectedVariantId, quantity: Math.max(1, quantity), lens_params: lensParamsPayload }],
         });
         if (res.payUrl) {
           window.location.assign(res.payUrl);
@@ -425,7 +505,7 @@ export default function ProductDetailPage() {
       if (!ok) {
         return;
       }
-      navigate("/checkout");
+      navigate("/checkout/confirm");
     } finally {
       setBuyingNow(false);
     }
@@ -592,6 +672,37 @@ export default function ProductDetailPage() {
               )}
             </div>
 
+            {isLensProduct ? (
+              <div className="mt-8 max-w-xl overflow-hidden rounded-lg border border-slate-200 bg-white/90 shadow-sm">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50/90"
+                  onClick={() => setLensParamsOpen((v) => !v)}
+                  aria-expanded={lensParamsOpen}
+                >
+                  <span className="text-sm font-semibold text-slate-800">Thông số tròng kính</span>
+                  <span className="shrink-0 text-xs font-medium text-[#2bb6a3]">
+                    {lensParamsOpen ? "Thu gọn" : "Mở rộng"}
+                  </span>
+                </button>
+                {lensParamsOpen ? (
+                  <div className="border-t border-slate-100 px-3 pb-3 pt-2">
+                    <LensParamsEditor
+                      initialValue={savedLensParams ?? undefined}
+                      onSubmit={(value) => {
+                        setSavedLensParams(value);
+                        toast.success("Đã lưu thành công.");
+                      }}
+                    />
+                  </div>
+                ) : savedLensParams && Object.keys(savedLensParams).length > 0 ? (
+                  <p className="border-t border-slate-100 px-4 pb-3 pt-2 text-xs text-slate-600">
+                    Đã lưu thông số — chọn &quot;Mở rộng&quot; để chỉnh sửa.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="mt-8 flex flex-wrap items-center gap-4">
               <div className="inline-flex h-10 items-center border border-slate-300">
                 <button
@@ -674,6 +785,13 @@ export default function ProductDetailPage() {
                 <div className="mt-2 grid gap-2">
                   <input
                     type="text"
+                    value={preorderReceiverName}
+                    onChange={(e) => setPreorderReceiverName(e.target.value)}
+                    placeholder="Tên người nhận"
+                    className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none transition focus:border-[#2bb6a3]"
+                  />
+                  <input
+                    type="text"
                     value={preorderAddress}
                     onChange={(e) => setPreorderAddress(e.target.value)}
                     placeholder="Địa chỉ giao hàng đầy đủ"
@@ -722,9 +840,6 @@ export default function ProductDetailPage() {
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Pre-order</span>
                 ) : null}
               </div>
-              <button type="button" className="font-medium text-[#2bb6a3] transition hover:opacity-80">
-                Xem chi nhánh còn hàng +
-              </button>
             </div>
 
             <div className="border-b border-slate-200">
